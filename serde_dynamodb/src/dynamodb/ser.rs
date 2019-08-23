@@ -6,6 +6,7 @@ use rusoto_dynamodb::AttributeValue;
 use serde;
 
 use crate::error::{Error, Result};
+use bytes::Bytes;
 
 macro_rules! impl_serialize_n {
     ($type:ty, $method:ident) => {
@@ -70,7 +71,7 @@ where
         Serializer { writer }
     }
 
-    fn reject_non_struct_root(&mut self, write: &mut FnMut(&mut W) -> Result<()>) -> Result<()> {
+    fn reject_non_struct_root(&mut self, write: &mut dyn FnMut(&mut W) -> Result<()>) -> Result<()> {
         if self.writer.is_in_object() {
             write(&mut self.writer)
         } else {
@@ -134,8 +135,12 @@ where
         Ok(())
     }
 
-    fn serialize_bytes(self, _value: &[u8]) -> Result<()> {
-        unimplemented!()
+    fn serialize_bytes(self, value: &[u8]) -> Result<()> {
+        self.writer.insert_value(AttributeValue {
+            b: Some(Bytes::from(value)),
+            ..Default::default()
+        });
+        Ok(())
     }
 
     fn serialize_unit(self) -> Result<()> {
