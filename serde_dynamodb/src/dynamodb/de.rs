@@ -40,14 +40,17 @@ trait Read {
     fn get_attribute_value(&self, index: &Index) -> Option<&AttributeValue>;
     fn get_keys(&self) -> Vec<String>;
 }
+
 struct HashMapRead<S: ::std::hash::BuildHasher> {
     hashmap: HashMap<String, AttributeValue, S>,
 }
+
 impl<S: ::std::hash::BuildHasher> HashMapRead<S> {
     fn new(hm: HashMap<String, AttributeValue, S>) -> Self {
         HashMapRead { hashmap: hm }
     }
 }
+
 impl<S: ::std::hash::BuildHasher> Read for HashMapRead<S> {
     fn get_attribute_value(&self, index: &Index) -> Option<&AttributeValue> {
         match *index {
@@ -82,9 +85,10 @@ struct Deserializer<R> {
     current_field: Index,
     as_key: bool,
 }
+
 impl<'de, R> Deserializer<R>
-where
-    R: Read,
+    where
+        R: Read,
 {
     pub fn new(read: R) -> Self {
         Deserializer {
@@ -99,15 +103,15 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     type Error = Error;
 
     fn deserialize_any<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         unimplemented!()
     }
 
     fn deserialize_bool<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         visitor.visit_bool(
             self.read
@@ -137,8 +141,8 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     impl_deserialize_n!(f64, deserialize_f64, visit_f64);
 
     fn deserialize_char<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         visitor.visit_char(
             self.read
@@ -159,8 +163,8 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     }
 
     fn deserialize_str<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         if self.as_key {
             match &self.current_field {
@@ -181,29 +185,49 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     }
 
     fn deserialize_string<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         self.deserialize_str(visitor)
     }
 
-    fn deserialize_bytes<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+    fn deserialize_bytes<V>(self, visitor: V) -> Result<V::Value>
+        where
+            V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        if let Some(field) = self.read.get_attribute_value(&self.current_field) {
+            field
+                .clone()
+                .b
+                .ok_or_else(|| Error {
+                    message: format!("missing string for field {:?}", &self.current_field),
+                })
+                .and_then(|bytes| visitor.visit_bytes(bytes.as_ref()))
+        } else {
+            visitor.visit_bytes(&[])
+        }
     }
 
-    fn deserialize_byte_buf<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+    fn deserialize_byte_buf<V>(self, visitor: V) -> Result<V::Value>
+        where
+            V: serde::de::Visitor<'de>,
     {
-        unimplemented!()
+        if let Some(field) = self.read.get_attribute_value(&self.current_field) {
+            field
+                .clone()
+                .b
+                .ok_or_else(|| Error {
+                    message: format!("missing string for field {:?}", &self.current_field),
+                })
+                .and_then(|bytes| visitor.visit_byte_buf(bytes.to_vec()))
+        } else {
+            visitor.visit_byte_buf(vec![])
+        }
     }
 
     fn deserialize_option<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         if self.read.get_attribute_value(&self.current_field).is_none() {
             return visitor.visit_none();
@@ -215,15 +239,15 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
                 message: format!("missing option for field {:?}", &self.current_field),
             })?
             .null
-        {
-            Some(true) => visitor.visit_none(),
-            _ => visitor.visit_some(self),
-        }
+            {
+                Some(true) => visitor.visit_none(),
+                _ => visitor.visit_some(self),
+            }
     }
 
     fn deserialize_unit<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         self.read
             .get_attribute_value(&self.current_field)
@@ -238,22 +262,22 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     }
 
     fn deserialize_unit_struct<V>(self, _name: &'static str, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         self.deserialize_unit(visitor)
     }
 
     fn deserialize_newtype_struct<V>(self, _name: &str, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         visitor.visit_newtype_struct(self)
     }
 
     fn deserialize_seq<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         let list = self
             .read
@@ -294,8 +318,8 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     }
 
     fn deserialize_tuple<V>(self, _len: usize, _visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         unimplemented!()
     }
@@ -306,15 +330,15 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
         _len: usize,
         _visitor: V,
     ) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         unimplemented!()
     }
 
     fn deserialize_map<V>(self, _visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         unimplemented!()
     }
@@ -325,8 +349,8 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
         _fields: &'static [&'static str],
         visitor: V,
     ) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         match self.current_field {
             Index::None => visitor.visit_map(MapAccess::new(self, self.read.get_keys())),
@@ -353,15 +377,15 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
         _variants: &'static [&'static str],
         _visitor: V,
     ) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         unimplemented!()
     }
 
     fn deserialize_identifier<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         match self.current_field {
             Index::String(ref value) => visitor.visit_str(&value.clone()),
@@ -372,8 +396,8 @@ impl<'de, 'a, R: Read> serde::de::Deserializer<'de> for &'a mut Deserializer<R> 
     }
 
     fn deserialize_ignored_any<V>(self, visitor: V) -> Result<V::Value>
-    where
-        V: serde::de::Visitor<'de>,
+        where
+            V: serde::de::Visitor<'de>,
     {
         visitor.visit_unit()
     }
@@ -394,8 +418,8 @@ impl<'de, 'a, R: Read + 'a> serde::de::SeqAccess<'de> for SeqAccess<'a, R> {
     type Error = Error;
 
     fn next_element_seed<T>(&mut self, seed: T) -> Result<Option<T::Value>>
-    where
-        T: serde::de::DeserializeSeed<'de>,
+        where
+            T: serde::de::DeserializeSeed<'de>,
     {
         self.de.current_field = Index::Number(self.current);
         self.current += 1;
@@ -431,8 +455,8 @@ impl<'de, 'a, R: Read + 'a> serde::de::MapAccess<'de> for MapAccess<'a, R> {
     type Error = Error;
 
     fn next_key_seed<K>(&mut self, seed: K) -> Result<Option<K::Value>>
-    where
-        K: serde::de::DeserializeSeed<'de>,
+        where
+            K: serde::de::DeserializeSeed<'de>,
     {
         if self.current >= self.keys.len() {
             Ok(None)
@@ -445,8 +469,8 @@ impl<'de, 'a, R: Read + 'a> serde::de::MapAccess<'de> for MapAccess<'a, R> {
     }
 
     fn next_value_seed<V>(&mut self, seed: V) -> Result<V::Value>
-    where
-        V: serde::de::DeserializeSeed<'de>,
+        where
+            V: serde::de::DeserializeSeed<'de>,
     {
         self.de.as_key = false;
         seed.deserialize(&mut *self.de)
@@ -454,9 +478,9 @@ impl<'de, 'a, R: Read + 'a> serde::de::MapAccess<'de> for MapAccess<'a, R> {
 }
 
 fn from_trait<'de, R, T>(read: R) -> Result<T>
-where
-    R: Read,
-    T: serde::de::Deserialize<'de>,
+    where
+        R: Read,
+        T: serde::de::Deserialize<'de>,
 {
     let mut de = Deserializer::new(read);
     let value = serde::de::Deserialize::deserialize(&mut de)?;
@@ -478,8 +502,8 @@ where
 pub fn from_hashmap<'a, T, S: ::std::hash::BuildHasher>(
     hm: HashMap<String, AttributeValue, S>,
 ) -> Result<T>
-where
-    T: serde::de::Deserialize<'a>,
+    where
+        T: serde::de::Deserialize<'a>,
 {
     from_trait(HashMapRead::new(hm))
 }
